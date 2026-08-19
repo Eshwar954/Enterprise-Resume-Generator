@@ -1,0 +1,17 @@
+[project]
+name = "enterprise-resume-agent"
+version = "0.1.0"
+description = "Enterprise AI Resume Generator Agent"
+requires-python = ">=3.11"
+
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlmodel",
+    "python-dotenv",
+    "pyjwt",
+    "bcrypt",
+    "streamlit>=1.61.1",
+    "requests>=2.34.2",
+    "streamlit-pdf",
+]
