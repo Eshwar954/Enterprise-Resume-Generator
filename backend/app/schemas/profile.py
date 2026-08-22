@@ -19,7 +19,15 @@ class EducationItem(BaseModel):
     degree: str | None = None
     field: str | None = None
     duration: str | None = None
+    cgpa: str | None = None
 
+class PublicationItem(BaseModel):
+    title: str
+    authors: str | None = None
+    venue: str | None = None
+    year: str | None = None
+    url: str | None = None
+    description: str | None = None
 
 class ProfileAnalysis(BaseModel):
     candidate_level: str | None = None
@@ -41,5 +49,8 @@ class ProfileAnalysis(BaseModel):
     )
 
     certifications: list[str] = Field(
+        default_factory=list
+    )
+    publications: list[PublicationItem] = Field(
         default_factory=list
     )

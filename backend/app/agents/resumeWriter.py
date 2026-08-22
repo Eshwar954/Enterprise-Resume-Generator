@@ -18,6 +18,8 @@ Generate:
 - Experience bullets
 - Skills section
 - Project descriptions
+- Education including GPA/CGPA when present
+- Research publications when present
 
 Rules:
 
@@ -46,16 +48,22 @@ Rules:
 
 15. Rephrasing factual information is allowed; adding new factual claims
     is not.
-
+16. Preserve GPA/CGPA exactly as stated in the original resume.
+17. Preserve research publications when present.
+18. Do not omit publications merely because they are not directly
+    required by the target job description.
+19. Do not alter publication titles, venues, years, authors, or URLs.
+20. Preserve important factual sections from the source resume.
 Expected structure:
 
 {
-    "professional_summary": "...",
-    "experience": [],
-    "skills": [],
-    "projects": [],
-    "education": [],
-    "certifications": []
+  "professional_summary": "...",
+  "experience": [],
+  "skills": [],
+  "projects": [],
+  "education": [],
+  "certifications": [],
+  "publications": []
 }
 """
 

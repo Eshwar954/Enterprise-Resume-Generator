@@ -16,6 +16,8 @@ Analyze:
 - Projects
 - Education
 - Certifications
+- GPA / CGPA
+- Research publications
 
 Rules:
 
@@ -28,18 +30,23 @@ Rules:
 6. If information is unavailable, represent it as null, an empty list,
    or "Not specified".
 7. Return structured JSON only.
+8. Preserve GPA/CGPA exactly as stated in the source.
+9. Preserve publications when present in the source.
+10. Never invent publication titles, authors, venues, years, or links.
+11. Never invent or normalize GPA/CGPA values.
 
 Expected structure:
 
 {
-    "candidate_level": "...",
-    "primary_domain": "...",
-    "years_experience": 0,
-    "skills": [],
-    "experience": [],
-    "projects": [],
-    "education": [],
-    "certifications": []
+  "candidate_level": "...",
+  "primary_domain": "...",
+  "years_experience": 0,
+  "skills": [],
+  "experience": [],
+  "projects": [],
+  "education": [],
+  "certifications": [],
+  "publications": []
 }
 """
 
