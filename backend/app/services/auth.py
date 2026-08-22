@@ -47,6 +47,27 @@ class AuthService:
         )
 
     @staticmethod
+    def decode_access_token(token: str) -> int | None:
+        try:
+            payload = jwt.decode(
+                token,
+                SECRET_KEY,
+                algorithms=[ALGORITHM],
+            )
+        except jwt.PyJWTError:
+            return None
+
+        subject = payload.get("sub")
+
+        if subject is None:
+            return None
+
+        try:
+            return int(subject)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
     def register_user(
             db: Session,
             name: str,
@@ -98,3 +119,7 @@ class AuthService:
             return None
 
         return user
+
+    @staticmethod
+    def get_user_by_id(db: Session, user_id: int) -> User | None:
+        return db.get(User, user_id)

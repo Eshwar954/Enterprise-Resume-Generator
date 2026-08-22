@@ -10,6 +10,7 @@ ENDPOINTS = {
     "health": "/health",
     "login": "/auth/login",
     "register": "/auth/register",
+    "generate": "/resume/generate",
 }
 
 ROUTES = {
@@ -31,6 +32,7 @@ SESSION_DEFAULTS = {
     "token": None,
     "token_type": "bearer",
     "user_email": None,
+    "generation_result": None,
 }
 
 for key, value in SESSION_DEFAULTS.items():
@@ -90,18 +92,30 @@ def extract_error(response):
     return detail or "Request failed"
 
 
-def post_to_backend(endpoint_name, payload):
+def auth_headers():
+    if not st.session_state.token:
+        return {}
+    return {"Authorization": f"{st.session_state.token_type.capitalize()} {st.session_state.token}"}
+
+
+def post_to_backend(endpoint_name, payload, authenticated=False):
     try:
         response = requests.post(
             api_url(endpoint_name),
             json=payload,
             timeout=10,
+            headers=auth_headers() if authenticated else None,
         )
     except requests.RequestException:
         return None, "Could not connect to the backend. Start FastAPI on port 8000."
 
     if response.ok:
         return response.json(), None
+
+    if response.status_code == 401:
+        # Token missing/expired - kick the user back to login.
+        for key, value in SESSION_DEFAULTS.items():
+            st.session_state[key] = value
 
     return None, extract_error(response)
 
@@ -243,13 +257,109 @@ def show_signup():
             go_to("login")
 
 
+def render_profile_analysis(profile):
+    st.markdown("**Profile Analysis**")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Candidate Level", profile.get("candidate_level") or "-")
+    c2.metric("Primary Domain", profile.get("primary_domain") or "-")
+    c3.metric("Years of Experience", profile.get("years_experience", 0))
+    if profile.get("skills"):
+        st.write("Skills:", ", ".join(profile["skills"]))
+
+
+def render_ats_analysis(ats):
+    st.markdown("**ATS Analysis**")
+    st.metric("ATS Score", f"{ats.get('ats_score', 0)}/100")
+    if ats.get("matching_keywords"):
+        st.write("Matching keywords:", ", ".join(ats["matching_keywords"]))
+    if ats.get("missing_keywords"):
+        st.write("Missing keywords:", ", ".join(ats["missing_keywords"]))
+    if ats.get("formatting_suggestions"):
+        st.write("Formatting suggestions:")
+        for suggestion in ats["formatting_suggestions"]:
+            st.markdown(f"- {suggestion}")
+
+
+def render_generated_resume(resume):
+    st.markdown("**Generated Resume**")
+    st.write(resume.get("professional_summary", ""))
+
+    if resume.get("skills"):
+        st.write("**Skills:**", ", ".join(resume["skills"]))
+
+    if resume.get("experience"):
+        st.write("**Experience**")
+        for job in resume["experience"]:
+            title = " - ".join(filter(None, [job.get("role"), job.get("company")]))
+            st.markdown(f"*{title}* ({job.get('duration') or 'n/a'})")
+            for bullet in job.get("bullets", []):
+                st.markdown(f"- {bullet}")
+
+    if resume.get("projects"):
+        st.write("**Projects**")
+        for project in resume["projects"]:
+            st.markdown(f"- **{project.get('name')}**: {project.get('description') or ''}")
+
+
+def render_review_result(review):
+    st.markdown("**Reviewer Verdict**")
+    if review.get("approved"):
+        st.success("Approved by the Reviewer Agent")
+    else:
+        st.warning("Not yet approved by the Reviewer Agent")
+
+    if review.get("issues"):
+        st.write("Issues found:")
+        for issue in review["issues"]:
+            st.markdown(f"- {issue}")
+
+    if review.get("recommendations"):
+        st.write("Recommendations:")
+        for rec in review["recommendations"]:
+            st.markdown(f"- {rec}")
+
+
 def show_home():
     render_header()
     render_navbar()
     render_backend_status()
 
-    st.subheader("Account")
-    st.write("You are logged in.")
+    st.subheader("Generate a Resume")
+    st.write("Paste your profile/resume text and a target job description.")
+
+    resume_text = st.text_area("Your resume / profile", height=200, placeholder="Paste your resume text here...")
+    job_description = st.text_area("Target job description", height=200, placeholder="Paste the job description here...")
+
+    if st.button("Generate", type="primary"):
+        if not resume_text.strip() or not job_description.strip():
+            st.error("Please provide both your resume text and a job description.")
+        else:
+            with st.spinner("Running the agent pipeline (profile -> ATS -> writer -> reviewer)..."):
+                result, error = post_to_backend(
+                    "generate",
+                    {
+                        "resume_text": resume_text,
+                        "job_description": job_description,
+                    },
+                    authenticated=True,
+                )
+
+            if error:
+                st.error(error)
+            else:
+                st.session_state.generation_result = result
+                st.rerun()
+
+    if st.session_state.generation_result:
+        st.divider()
+        result = st.session_state.generation_result
+        render_profile_analysis(result["profile_analysis"])
+        st.divider()
+        render_ats_analysis(result["ats_analysis"])
+        st.divider()
+        render_generated_resume(result["generated_resume"])
+        st.divider()
+        render_review_result(result["review_result"])
 
 
 if st.session_state.page == ROUTES["signup"]:

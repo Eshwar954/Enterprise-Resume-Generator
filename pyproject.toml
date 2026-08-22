@@ -14,4 +14,7 @@ dependencies = [
     "streamlit>=1.61.1",
     "requests>=2.34.2",
     "streamlit-pdf",
+    "langgraph",
+    "google-genai",
+    "groq",
 ]

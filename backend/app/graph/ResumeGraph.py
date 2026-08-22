@@ -49,7 +49,7 @@ class ResumeGraph:
     ) -> dict:
 
         result = await self.ats_agent.run(
-            profile_analysis=state["resume_text"],
+            profile_analysis=state["profile_analysis"],
             job_description=state["job_description"]
         )
 
