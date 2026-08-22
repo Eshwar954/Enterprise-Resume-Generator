@@ -462,24 +462,9 @@ def go_to(page):
 # SHARED UI
 # ============================================================
 
-def brand():
-    st.markdown(
-        """
-        <div class="brand">
-            <div class="brand-mark">R</div>
-            <div>
-                <div class="brand-title">Resume Studio</div>
-                <div class="brand-subtitle">AI-powered career workspace</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
 
 def sidebar():
     with st.sidebar:
-        brand()
 
         if st.session_state.token:
             st.caption(
@@ -987,8 +972,13 @@ def render_results(payload):
     st.divider()
     st.markdown("### Generation results")
 
+    # ============================================================
+    # ATS ANALYSIS
+    # ============================================================
+
     if ats:
         score = ats.get("ats_score")
+
         col1, col2, col3 = st.columns(3)
 
         with col1:
@@ -1011,83 +1001,447 @@ def render_results(payload):
                 len(missing),
             )
 
-        with st.expander("ATS analysis", expanded=True):
+        with st.expander(
+            "ATS analysis",
+            expanded=True,
+        ):
             if ats.get("matching_keywords"):
                 st.write(
                     "Matched:",
-                    ", ".join(ats["matching_keywords"]),
+                    ", ".join(
+                        ats["matching_keywords"]
+                    ),
                 )
 
             if ats.get("missing_keywords"):
                 st.write(
                     "Missing:",
-                    ", ".join(ats["missing_keywords"]),
+                    ", ".join(
+                        ats["missing_keywords"]
+                    ),
                 )
 
             if ats.get("formatting_suggestions"):
                 st.write("Formatting suggestions:")
-                for suggestion in ats["formatting_suggestions"]:
-                    st.markdown(f"- {suggestion}")
+
+                for suggestion in ats[
+                    "formatting_suggestions"
+                ]:
+                    st.markdown(
+                        f"- {suggestion}"
+                    )
+
+    # ============================================================
+    # REVIEWER
+    # ============================================================
 
     if review:
-        with st.expander("Reviewer result", expanded=True):
+        with st.expander(
+            "Reviewer result",
+            expanded=True,
+        ):
             if review.get("approved"):
-                st.success("Approved by the reviewer agent.")
+                st.success(
+                    "Approved by the reviewer agent."
+                )
             else:
-                st.warning("Reviewer found issues.")
+                st.warning(
+                    "Reviewer found issues."
+                )
 
-            for issue in review.get("issues", []):
-                st.markdown(f"- {issue}")
+            issues = review.get("issues", [])
 
-            recommendations = review.get("recommendations", [])
+            if issues:
+                st.write("Issues:")
+
+                for issue in issues:
+                    st.markdown(
+                        f"- {issue}"
+                    )
+
+            recommendations = review.get(
+                "recommendations",
+                [],
+            )
+
             if recommendations:
-                st.write("Recommendations:")
+                st.write(
+                    "Recommendations:"
+                )
+
                 for recommendation in recommendations:
-                    st.markdown(f"- {recommendation}")
+                    st.markdown(
+                        f"- {recommendation}"
+                    )
 
-    if resume:
-        with st.expander("Generated resume data", expanded=True):
-            summary = resume.get("professional_summary")
-            if summary:
-                st.markdown("#### Professional summary")
-                st.write(summary)
+    # ============================================================
+    # GENERATED RESUME
+    # ============================================================
 
-            skills = resume.get("skills", [])
-            if skills:
-                st.markdown("#### Skills")
-                st.write(", ".join(skills))
+    if not resume:
+        return
 
-            experience = resume.get("experience", [])
-            if experience:
-                st.markdown("#### Experience")
-                for job in experience:
-                    title = " — ".join(
-                        filter(
-                            None,
-                            [
-                                job.get("role"),
-                                job.get("company"),
-                            ],
+    with st.expander(
+        "Generated resume data",
+        expanded=True,
+    ):
+
+        # ========================================================
+        # PROFESSIONAL SUMMARY
+        # ========================================================
+
+        summary = resume.get(
+            "professional_summary"
+        )
+
+        if summary:
+            st.markdown(
+                "#### Professional summary"
+            )
+
+            st.write(summary)
+
+        # ========================================================
+        # SKILLS
+        # ========================================================
+
+        skills = resume.get(
+            "skills",
+            [],
+        )
+
+        if skills:
+            st.markdown("#### Skills")
+
+            st.write(
+                ", ".join(skills)
+            )
+
+        # ========================================================
+        # EXPERIENCE
+        # ========================================================
+
+        experience = resume.get(
+            "experience",
+            [],
+        )
+
+        if experience:
+            st.markdown(
+                "#### Experience"
+            )
+
+            for job in experience:
+
+                title = " — ".join(
+                    filter(
+                        None,
+                        [
+                            job.get("role"),
+                            job.get("company"),
+                        ],
+                    )
+                )
+
+                st.markdown(
+                    f"**{title or 'Experience'}**"
+                )
+
+                duration = job.get(
+                    "duration"
+                )
+
+                if duration:
+                    st.caption(duration)
+
+                bullets = job.get(
+                    "bullets",
+                    [],
+                )
+
+                for bullet in bullets:
+                    st.markdown(
+                        f"- {bullet}"
+                    )
+
+        # ========================================================
+        # PROJECTS
+        # ========================================================
+
+        projects = resume.get(
+            "projects",
+            [],
+        )
+
+        if projects:
+            st.markdown(
+                "#### Projects"
+            )
+
+            for project in projects:
+
+                project_name = project.get(
+                    "name",
+                    "Project",
+                )
+
+                st.markdown(
+                    f"**{project_name}**"
+                )
+
+                # Technologies
+                technologies = project.get(
+                    "technologies",
+                    [],
+                )
+
+                if technologies:
+                    st.caption(
+                        " · ".join(
+                            technologies
                         )
                     )
-                    st.markdown(
-                        f"**{title or 'Experience'}**"
-                    )
-                    st.caption(
-                        job.get("duration") or ""
-                    )
-                    for bullet in job.get("bullets", []):
-                        st.markdown(f"- {bullet}")
 
-            projects = resume.get("projects", [])
-            if projects:
-                st.markdown("#### Projects")
-                for project in projects:
+                # Project bullets
+                bullets = project.get(
+                    "bullets",
+                    [],
+                )
+
+                for bullet in bullets:
                     st.markdown(
-                        f"**{project.get('name', 'Project')}**"
+                        f"- {bullet}"
                     )
-                    if project.get("description"):
-                        st.write(project["description"])
+
+                # Backwards compatibility:
+                # If an older backend still sends description
+                description = project.get(
+                    "description"
+                )
+
+                if not bullets and description:
+
+                    if isinstance(
+                        description,
+                        list,
+                    ):
+                        for bullet in description:
+                            st.markdown(
+                                f"- {bullet}"
+                            )
+                    else:
+                        st.write(
+                            description
+                        )
+
+                # Project URL
+                url = project.get(
+                    "url"
+                )
+
+                if url:
+                    st.markdown(
+                        f"[View project / GitHub]({url})"
+                    )
+
+        # ========================================================
+        # PUBLICATIONS
+        # ========================================================
+
+        publications = resume.get(
+            "publications",
+            [],
+        )
+
+        if publications:
+            st.markdown(
+                "#### Research Publications"
+            )
+
+            for publication in publications:
+
+                title = publication.get(
+                    "title",
+                    "Untitled publication",
+                )
+
+                st.markdown(
+                    f"**{title}**"
+                )
+
+                meta = []
+
+                authors = publication.get(
+                    "authors"
+                )
+
+                if authors:
+                    meta.append(
+                        authors
+                    )
+
+                venue = publication.get(
+                    "venue"
+                )
+
+                if venue:
+                    meta.append(
+                        venue
+                    )
+
+                year = publication.get(
+                    "year"
+                )
+
+                if year:
+                    meta.append(
+                        str(year)
+                    )
+
+                if meta:
+                    st.caption(
+                        " · ".join(meta)
+                    )
+
+                status = publication.get(
+                    "status"
+                )
+
+                if status:
+                    st.write(
+                        f"**Status:** {status}"
+                    )
+
+                description = publication.get(
+                    "description"
+                )
+
+                if description:
+                    st.write(
+                        description
+                    )
+
+                url = publication.get(
+                    "url"
+                )
+
+                if url:
+                    st.markdown(
+                        f"[Publication link]({url})"
+                    )
+
+        # ========================================================
+        # EDUCATION
+        # ========================================================
+
+        education = resume.get(
+            "education",
+            [],
+        )
+
+        if education:
+            st.markdown(
+                "#### Education"
+            )
+
+            for item in education:
+
+                degree = item.get(
+                    "degree"
+                )
+
+                field = item.get(
+                    "field"
+                )
+
+                institution = item.get(
+                    "institution"
+                )
+
+                duration = item.get(
+                    "duration"
+                )
+
+                cgpa = item.get(
+                    "cgpa"
+                )
+
+                if degree and field:
+                    heading = (
+                        f"{degree} in {field}"
+                    )
+                else:
+                    heading = (
+                        degree
+                        or field
+                        or "Education"
+                    )
+
+                st.markdown(
+                    f"**{heading}**"
+                )
+
+                if institution:
+                    st.write(
+                        institution
+                    )
+
+                education_meta = []
+
+                if duration:
+                    education_meta.append(
+                        duration
+                    )
+
+                if cgpa:
+                    education_meta.append(
+                        f"CGPA: {cgpa}"
+                    )
+
+                if education_meta:
+                    st.caption(
+                        " · ".join(
+                            education_meta
+                        )
+                    )
+
+        # ========================================================
+        # CERTIFICATIONS
+        # ========================================================
+
+        certifications = resume.get(
+            "certifications",
+            [],
+        )
+
+        if certifications:
+            st.markdown(
+                "#### Certifications"
+            )
+
+            for certification in certifications:
+                st.markdown(
+                    f"- {certification}"
+                )
+
+        # ========================================================
+        # ACHIEVEMENTS
+        # ========================================================
+
+        achievements = resume.get(
+            "achievements",
+            [],
+        )
+
+        if achievements:
+            st.markdown(
+                "#### Achievements"
+            )
+
+            for achievement in achievements:
+                st.markdown(
+                    f"- {achievement}"
+                )
 
 
 def show_generate():

@@ -1,16 +1,26 @@
 from pydantic import BaseModel, Field
 
+from backend.app.schemas.profile import PublicationItem
+
+
 class ResumeExperience(BaseModel):
     company: str | None = None
     role: str | None = None
     duration: str | None = None
-    bullets: list[str] = Field(default_factory=list)
+    bullets: list[str] = Field(
+        default_factory=list
+    )
 
 
 class ResumeProject(BaseModel):
     name: str
-    description: str | None = None
-    technologies: list[str] = Field(default_factory=list)
+    technologies: list[str] = Field(
+        default_factory=list
+    )
+    url: str | None = None
+    bullets: list[str] = Field(
+        default_factory=list
+    )
 
 
 class ResumeEducation(BaseModel):
@@ -20,13 +30,6 @@ class ResumeEducation(BaseModel):
     duration: str | None = None
     cgpa: str | None = None
 
-class PublicationItem(BaseModel):
-    title: str
-    authors: str | None = None
-    venue: str | None = None
-    year: str | None = None
-    url: str | None = None
-    description: str | None = None
 
 class GeneratedResume(BaseModel):
     professional_summary: str
@@ -50,6 +53,11 @@ class GeneratedResume(BaseModel):
     certifications: list[str] = Field(
         default_factory=list
     )
+
     publications: list[PublicationItem] = Field(
+        default_factory=list
+    )
+
+    achievements: list[str] = Field(
         default_factory=list
     )
