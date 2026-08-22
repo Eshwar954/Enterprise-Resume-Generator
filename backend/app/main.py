@@ -1,12 +1,21 @@
 import logging
 
-from fastapi import FastAPI
-
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+    FastAPI
+)
 from backend.app.api.routes.auth import router as auth_router
 from backend.app.api.routes.health import router as health_router
 from backend.app.api.routes.resume import router as resume_router
 from backend.app.core.logging import RequestLoggingMiddleware, configure_logging
 from backend.app.database import create_tables
+from backend.app.services.document_parser import extract_text
 
 configure_logging()
 logger = logging.getLogger("app.main")

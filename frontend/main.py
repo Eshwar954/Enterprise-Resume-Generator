@@ -1,370 +1,1265 @@
+
 import os
+import re
+from datetime import datetime
 
 import requests
 import streamlit as st
+from dotenv import load_dotenv
 
 
-API_BASE_URL = os.getenv("RESUME_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+load_dotenv()
 
-ENDPOINTS = {
-    "health": "/health",
-    "login": "/auth/login",
-    "register": "/auth/register",
-    "generate": "/resume/generate",
-}
-
-ROUTES = {
-    "login": "login",
-    "signup": "signup",
-    "home": "home",
-}
-
+API_BASE_URL = os.getenv(
+    "RESUME_API_BASE_URL",
+    "http://127.0.0.1:8000",
+).rstrip("/")
 
 st.set_page_config(
-    page_title="Enterprise Resume Generator",
+    page_title="Resume Studio",
     page_icon="",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 
-SESSION_DEFAULTS = {
-    "page": ROUTES["login"],
+# ============================================================
+# SESSION STATE
+# ============================================================
+
+DEFAULTS = {
+    "page": "login",
     "token": None,
     "token_type": "bearer",
     "user_email": None,
+    "user_name": None,
     "generation_result": None,
+    "history": [],
+    "backend_status": None,
 }
 
-for key, value in SESSION_DEFAULTS.items():
+for key, value in DEFAULTS.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
-if st.session_state.page == ROUTES["home"] and not st.session_state.token:
-    st.session_state.page = ROUTES["login"]
+if st.session_state.token is None and st.session_state.page not in {
+    "login",
+    "signup",
+}:
+    st.session_state.page = "login"
 
+
+# ============================================================
+# DESIGN SYSTEM
+# ============================================================
 
 st.markdown(
     """
     <style>
+        :root {
+            --bg: #0b1020;
+            --panel: #111827;
+            --panel-2: #172033;
+            --border: #263247;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --accent: #7c3aed;
+            --accent-2: #8b5cf6;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        .stApp {
+            background:
+                radial-gradient(circle at 80% 0%, rgba(124,58,237,.14), transparent 28rem),
+                radial-gradient(circle at 0% 20%, rgba(59,130,246,.08), transparent 24rem),
+                #0b1020;
+            color: var(--text);
+        }
+
         .block-container {
-            max-width: 960px;
-            padding-top: 1.5rem;
+            max-width: 1280px;
+            padding-top: 1.4rem;
+            padding-bottom: 4rem;
         }
 
-        div[data-testid="stHorizontalBlock"] {
+        section[data-testid="stSidebar"] {
+            background: #0a0f1c;
+            border-right: 1px solid #1f2937;
+        }
+
+        section[data-testid="stSidebar"] .block-container {
+            padding-top: 1.4rem;
+        }
+
+        h1, h2, h3, h4, p, label {
+            color: var(--text);
+        }
+
+        .brand {
+            display: flex;
             align-items: center;
+            gap: .8rem;
+            margin-bottom: 1.8rem;
         }
 
-        .app-title {
-            font-size: 1.8rem;
+        .brand-mark {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #7c3aed, #2563eb);
+            color: white;
+            font-weight: 800;
+            font-size: 1.1rem;
+            box-shadow: 0 10px 30px rgba(124,58,237,.25);
+        }
+
+        .brand-title {
+            font-size: 1.05rem;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+
+        .brand-subtitle {
+            color: var(--muted);
+            font-size: .75rem;
+            margin-top: .15rem;
+        }
+
+        .hero {
+            padding: 2.1rem 2.2rem;
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            background:
+                linear-gradient(135deg, rgba(124,58,237,.16), rgba(37,99,235,.08)),
+                rgba(17,24,39,.82);
+            box-shadow: 0 24px 70px rgba(0,0,0,.22);
+            margin-bottom: 1.5rem;
+        }
+
+        .eyebrow {
+            color: #a78bfa;
+            text-transform: uppercase;
+            letter-spacing: .12em;
+            font-size: .72rem;
+            font-weight: 800;
+            margin-bottom: .5rem;
+        }
+
+        .hero h1 {
+            margin: 0;
+            font-size: clamp(2rem, 4vw, 3.4rem);
+            line-height: 1.02;
+        }
+
+        .hero p {
+            color: #cbd5e1;
+            max-width: 760px;
+            margin-top: .8rem;
+            font-size: 1rem;
+        }
+
+        .card {
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            background: rgba(17,24,39,.82);
+            padding: 1.25rem;
+            box-shadow: 0 14px 40px rgba(0,0,0,.16);
+        }
+
+        .card-title {
+            font-size: 1rem;
             font-weight: 750;
-            margin: 0 0 0.15rem;
+            margin-bottom: .25rem;
         }
 
-        .app-subtitle {
-            color: #64748b;
-            margin-bottom: 1.25rem;
+        .card-subtitle {
+            color: var(--muted);
+            font-size: .85rem;
+            margin-bottom: 1rem;
         }
+
+        .stat {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1rem 1.1rem;
+            background: rgba(17,24,39,.72);
+        }
+
+        .stat-label {
+            color: var(--muted);
+            font-size: .78rem;
+        }
+
+        .stat-value {
+            color: white;
+            font-size: 1.7rem;
+            font-weight: 800;
+            margin-top: .15rem;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: .45rem;
+            padding: .38rem .7rem;
+            border-radius: 999px;
+            font-size: .75rem;
+            font-weight: 700;
+            border: 1px solid #334155;
+            background: #111827;
+        }
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .dot-green { background: #22c55e; }
+        .dot-red { background: #ef4444; }
+
+        .step {
+            display: flex;
+            align-items: center;
+            gap: .8rem;
+            padding: .7rem .8rem;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(15,23,42,.65);
+            margin-bottom: .55rem;
+        }
+
+        .step-number {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #1e293b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .75rem;
+            font-weight: 800;
+            color: #c4b5fd;
+        }
+
+        .step-title {
+            font-weight: 700;
+            font-size: .85rem;
+        }
+
+        .step-copy {
+            color: var(--muted);
+            font-size: .72rem;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem 1.1rem;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: rgba(17,24,39,.82);
+        }
+
+        .result-title {
+            font-size: 1.15rem;
+            font-weight: 800;
+        }
+
+        .result-meta {
+            color: var(--muted);
+            font-size: .78rem;
+        }
+
+        .resume-preview {
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            background: white;
+            color: #111827;
+            padding: 2rem;
+            min-height: 400px;
+        }
+
+        .resume-preview h2,
+        .resume-preview h3,
+        .resume-preview p,
+        .resume-preview li {
+            color: #111827;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            border: 1px dashed #334155;
+            border-radius: 18px;
+            background: rgba(15,23,42,.45);
+        }
+
+        div[data-testid="stFileUploader"] {
+            border-radius: 14px;
+        }
+
+        .small-muted {
+            color: #94a3b8;
+            font-size: .78rem;
+        }
+
+        /* Improve Streamlit button hierarchy */
+        .stButton > button,
+        .stDownloadButton > button {
+            border-radius: 10px;
+            font-weight: 700;
+            min-height: 42px;
+        }
+
+        /* Hide Streamlit menu/footer chrome */
+        #MainMenu { visibility: hidden; }
+        footer { visibility: hidden; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 
-def api_url(endpoint_name):
-    return f"{API_BASE_URL}{ENDPOINTS[endpoint_name]}"
+# ============================================================
+# API
+# ============================================================
+
+def auth_headers():
+    token = st.session_state.get("token")
+    if not token:
+        return {}
+
+    token_type = st.session_state.get("token_type") or "bearer"
+    return {
+        "Authorization": f"{token_type.title()} {token}",
+    }
 
 
 def extract_error(response):
     try:
-        detail = response.json().get("detail")
+        payload = response.json()
+        detail = payload.get("detail")
     except ValueError:
         detail = response.text
 
     if isinstance(detail, list):
         messages = []
         for item in detail:
-            field = item.get("loc", ["field"])[-1]
-            message = item.get("msg", "Invalid value")
-            messages.append(f"{field}: {message}")
-        detail = "\n".join(messages)
+            if isinstance(item, dict):
+                location = item.get("loc", ["field"])
+                field = location[-1] if location else "field"
+                message = item.get("msg", "Invalid value")
+                messages.append(f"{field}: {message}")
+        return "\n".join(messages) or "Request failed."
 
-    return detail or "Request failed"
-
-
-def auth_headers():
-    if not st.session_state.token:
-        return {}
-    return {"Authorization": f"{st.session_state.token_type.capitalize()} {st.session_state.token}"}
-
-
-def post_to_backend(endpoint_name, payload, authenticated=False):
-    try:
-        response = requests.post(
-            api_url(endpoint_name),
-            json=payload,
-            timeout=10,
-            headers=auth_headers() if authenticated else None,
+    if isinstance(detail, dict):
+        return (
+            detail.get("message")
+            or detail.get("error")
+            or "Request failed."
         )
-    except requests.RequestException:
-        return None, "Could not connect to the backend. Start FastAPI on port 8000."
+
+    return detail or "Request failed."
+
+
+def api_request(
+    method,
+    endpoint,
+    *,
+    data=None,
+    json=None,
+    files=None,
+    timeout=15,
+):
+    try:
+        response = requests.request(
+            method=method,
+            url=f"{API_BASE_URL}{endpoint}",
+            headers=auth_headers(),
+            data=data,
+            json=json,
+            files=files,
+            timeout=timeout,
+        )
+    except requests.Timeout:
+        return None, (
+            "The backend did not respond within the allowed time. "
+            "The operation may still be processing."
+        )
+    except requests.ConnectionError:
+        return None, (
+            f"Could not reach FastAPI at {API_BASE_URL}. "
+            "Make sure the backend is running."
+        )
+    except requests.RequestException as exc:
+        return None, f"Backend request failed: {exc}"
 
     if response.ok:
-        return response.json(), None
+        return response, None
 
     if response.status_code == 401:
-        # Token missing/expired - kick the user back to login.
-        for key, value in SESSION_DEFAULTS.items():
-            st.session_state[key] = value
+        clear_session()
+        return response, "Your session expired. Please sign in again."
 
-    return None, extract_error(response)
+    if response.status_code == 429:
+        return response, (
+            "The AI service quota or rate limit has been reached. "
+            "Please try again later."
+        )
+
+    if response.status_code >= 500:
+        return response, (
+            f"The backend returned an error ({response.status_code}). "
+            f"{extract_error(response)}"
+        )
+
+    return response, extract_error(response)
 
 
-@st.cache_data(ttl=10)
-def backend_is_connected():
+def backend_health():
     try:
-        response = requests.get(api_url("health"), timeout=5)
+        response = requests.get(
+            f"{API_BASE_URL}/health",
+            timeout=5,
+        )
+        return response.ok
     except requests.RequestException:
         return False
 
-    return response.ok
 
+# ============================================================
+# SESSION / NAVIGATION
+# ============================================================
 
-def go_to(route_name):
-    st.session_state.page = ROUTES[route_name]
-    st.rerun()
+def clear_session():
+    for key, value in DEFAULTS.items():
+        if isinstance(value, list):
+            st.session_state[key] = []
+        else:
+            st.session_state[key] = value
 
 
 def logout():
-    for key, value in SESSION_DEFAULTS.items():
-        st.session_state[key] = value
+    clear_session()
     st.rerun()
 
 
-def render_header():
-    st.markdown('<h1 class="app-title">Enterprise Resume Generator</h1>', unsafe_allow_html=True)
+def go_to(page):
+    st.session_state.page = page
+    st.rerun()
+
+
+# ============================================================
+# SHARED UI
+# ============================================================
+
+def brand():
     st.markdown(
-        '<div class="app-subtitle">Sign in or create an account to continue.</div>',
+        """
+        <div class="brand">
+            <div class="brand-mark">R</div>
+            <div>
+                <div class="brand-title">Resume Studio</div>
+                <div class="brand-subtitle">AI-powered career workspace</div>
+            </div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
 
-def render_backend_status():
-    if backend_is_connected():
-        st.caption(f"Backend connected: {API_BASE_URL}")
-    else:
-        st.warning(f"Backend unavailable at {API_BASE_URL}.")
+def sidebar():
+    with st.sidebar:
+        brand()
+
+        if st.session_state.token:
+            st.caption(
+                f"Signed in as {st.session_state.user_email or 'User'}"
+            )
+
+            if st.button(
+                "Dashboard",
+                use_container_width=True,
+                type=(
+                    "primary"
+                    if st.session_state.page == "dashboard"
+                    else "secondary"
+                ),
+            ):
+                go_to("dashboard")
+
+            if st.button(
+                "Create Resume",
+                use_container_width=True,
+                type=(
+                    "primary"
+                    if st.session_state.page == "generate"
+                    else "secondary"
+                ),
+            ):
+                go_to("generate")
+
+            st.divider()
+
+            online = backend_health()
+            if online:
+                st.markdown(
+                    '<div class="status-pill">'
+                    '<span class="dot dot-green"></span>'
+                    'Backend online'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    '<div class="status-pill">'
+                    '<span class="dot dot-red"></span>'
+                    'Backend offline'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+
+            st.caption(API_BASE_URL)
+
+            st.divider()
+
+            if st.button("Sign out", use_container_width=True):
+                logout()
+
+        else:
+            st.markdown(
+                """
+                <div class="small-muted">
+                    Build a tailored resume from your experience,
+                    target role, and job description.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 
-def render_navbar():
-    home_col, spacer_col, account_col, logout_col = st.columns([0.2, 0.42, 0.25, 0.13])
+def page_heading(eyebrow, title, description):
+    st.markdown(
+        f"""
+        <div class="hero">
+            <div class="eyebrow">{eyebrow}</div>
+            <h1>{title}</h1>
+            <p>{description}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    with home_col:
-        if st.button("Home", use_container_width=True, type="primary"):
-            go_to("home")
-    with account_col:
-        st.caption(f"Signed in as {st.session_state.user_email}")
-    with logout_col:
-        if st.button("Logout", use_container_width=True):
-            logout()
 
-    st.divider()
-
+# ============================================================
+# AUTH
+# ============================================================
 
 def show_login():
-    render_header()
-    render_backend_status()
+    sidebar()
 
-    _, center, _ = st.columns([0.25, 0.5, 0.25])
+    _, center, _ = st.columns([0.18, 0.64, 0.18])
+
     with center:
-        st.subheader("Welcome Back")
-        email = st.text_input("Email", placeholder="you@example.com")
-        password = st.text_input("Password", type="password", placeholder="Enter your password")
+        page_heading(
+            "Welcome back",
+            "Build a resume that gets noticed.",
+            "Sign in to your workspace and create a job-specific resume "
+            "with profile analysis, ATS optimization, generation, and review.",
+        )
 
-        if st.button("Login", use_container_width=True, type="primary"):
+        st.markdown(
+            '<div class="card">',
+            unsafe_allow_html=True,
+        )
+
+        st.subheader("Sign in")
+
+        email = st.text_input(
+            "Email",
+            placeholder="you@example.com",
+            key="login_email",
+        )
+
+        password = st.text_input(
+            "Password",
+            type="password",
+            placeholder="Enter your password",
+            key="login_password",
+        )
+
+        if st.button(
+            "Sign in",
+            use_container_width=True,
+            type="primary",
+        ):
             email = email.strip()
 
             if not email or not password:
-                st.error("Please enter your email and password.")
+                st.error("Enter your email and password.")
             else:
-                result, error = post_to_backend(
-                    "login",
-                    {
+                response, error = api_request(
+                    "POST",
+                    "/auth/login",
+                    json={
                         "email": email,
                         "password": password,
                     },
+                    timeout=10,
                 )
 
                 if error:
                     st.error(error)
                 else:
-                    st.session_state.token = result["access_token"]
-                    st.session_state.token_type = result.get("token_type", "bearer")
+                    payload = response.json()
+
+                    st.session_state.token = payload["access_token"]
+                    st.session_state.token_type = payload.get(
+                        "token_type",
+                        "bearer",
+                    )
                     st.session_state.user_email = email
-                    st.session_state.page = ROUTES["home"]
+                    st.session_state.page = "dashboard"
+
                     st.rerun()
 
-        st.divider()
-        st.write("Don't have an account?")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        if st.button("Create an account", use_container_width=True):
+        st.write("")
+
+        if st.button(
+            "Create an account",
+            use_container_width=True,
+        ):
             go_to("signup")
 
 
 def show_signup():
-    render_header()
-    render_backend_status()
+    sidebar()
 
-    _, center, _ = st.columns([0.25, 0.5, 0.25])
+    _, center, _ = st.columns([0.18, 0.64, 0.18])
+
     with center:
-        st.subheader("Create your account")
-        name = st.text_input("Name", placeholder="Your name")
-        email = st.text_input("Email", placeholder="you@example.com")
-        password = st.text_input("Password", type="password", placeholder="Create a password")
-        confirm_password = st.text_input("Confirm Password", type="password", placeholder="Confirm your password")
+        page_heading(
+            "Get started",
+            "Create your workspace.",
+            "Set up your account and start generating tailored resumes.",
+        )
 
-        if st.button("Create Account", use_container_width=True, type="primary"):
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.subheader("Create account")
+
+        name = st.text_input(
+            "Name",
+            placeholder="Your name",
+            key="signup_name",
+        )
+
+        email = st.text_input(
+            "Email",
+            placeholder="you@example.com",
+            key="signup_email",
+        )
+
+        password = st.text_input(
+            "Password",
+            type="password",
+            placeholder="At least 8 characters",
+            key="signup_password",
+        )
+
+        confirm = st.text_input(
+            "Confirm password",
+            type="password",
+            placeholder="Repeat your password",
+            key="signup_confirm",
+        )
+
+        if st.button(
+            "Create account",
+            use_container_width=True,
+            type="primary",
+        ):
             name = name.strip()
             email = email.strip()
 
-            if not name or not email or not password or not confirm_password:
-                st.error("Please fill in all fields.")
-            elif password != confirm_password:
+            if not all([name, email, password, confirm]):
+                st.error("Complete all fields.")
+            elif password != confirm:
                 st.error("Passwords do not match.")
             elif len(password) < 8:
                 st.error("Password must be at least 8 characters.")
             else:
-                _, error = post_to_backend(
-                    "register",
-                    {
+                response, error = api_request(
+                    "POST",
+                    "/auth/register",
+                    json={
                         "name": name,
                         "email": email,
                         "password": password,
                     },
+                    timeout=10,
                 )
 
                 if error:
                     st.error(error)
                 else:
-                    st.success("Account created. You can log in now.")
-                    st.session_state.page = ROUTES["login"]
-                    st.rerun()
+                    st.success(
+                        "Account created. You can sign in now."
+                    )
+                    go_to("login")
 
-        st.divider()
-        st.write("Already have an account?")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        if st.button("Back to Login", use_container_width=True):
+        st.write("")
+
+        if st.button(
+            "Back to sign in",
+            use_container_width=True,
+        ):
             go_to("login")
 
 
-def render_profile_analysis(profile):
-    st.markdown("**Profile Analysis**")
+# ============================================================
+# DASHBOARD
+# ============================================================
+
+def show_dashboard():
+    sidebar()
+
+    history = st.session_state.history
+
+    page_heading(
+        "Workspace",
+        "Your resume command center.",
+        "Create, review, and download tailored resumes from one workspace.",
+    )
+
+    total = len(history)
+    companies = len(
+        {
+            item.get("company", "Unknown")
+            for item in history
+        }
+    )
+    latest = history[0]["date"] if history else "—"
+
     c1, c2, c3 = st.columns(3)
-    c1.metric("Candidate Level", profile.get("candidate_level") or "-")
-    c2.metric("Primary Domain", profile.get("primary_domain") or "-")
-    c3.metric("Years of Experience", profile.get("years_experience", 0))
-    if profile.get("skills"):
-        st.write("Skills:", ", ".join(profile["skills"]))
 
+    with c1:
+        st.markdown(
+            f"""
+            <div class="stat">
+                <div class="stat-label">Generated resumes</div>
+                <div class="stat-value">{total}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-def render_ats_analysis(ats):
-    st.markdown("**ATS Analysis**")
-    st.metric("ATS Score", f"{ats.get('ats_score', 0)}/100")
-    if ats.get("matching_keywords"):
-        st.write("Matching keywords:", ", ".join(ats["matching_keywords"]))
-    if ats.get("missing_keywords"):
-        st.write("Missing keywords:", ", ".join(ats["missing_keywords"]))
-    if ats.get("formatting_suggestions"):
-        st.write("Formatting suggestions:")
-        for suggestion in ats["formatting_suggestions"]:
-            st.markdown(f"- {suggestion}")
+    with c2:
+        st.markdown(
+            f"""
+            <div class="stat">
+                <div class="stat-label">Companies targeted</div>
+                <div class="stat-value">{companies}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
+    with c3:
+        st.markdown(
+            f"""
+            <div class="stat">
+                <div class="stat-label">Latest generation</div>
+                <div class="stat-value">{latest}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-def render_generated_resume(resume):
-    st.markdown("**Generated Resume**")
-    st.write(resume.get("professional_summary", ""))
+    st.write("")
 
-    if resume.get("skills"):
-        st.write("**Skills:**", ", ".join(resume["skills"]))
+    left, right = st.columns([0.7, 0.3])
 
-    if resume.get("experience"):
-        st.write("**Experience**")
-        for job in resume["experience"]:
-            title = " - ".join(filter(None, [job.get("role"), job.get("company")]))
-            st.markdown(f"*{title}* ({job.get('duration') or 'n/a'})")
-            for bullet in job.get("bullets", []):
-                st.markdown(f"- {bullet}")
+    with left:
+        st.markdown("### Recent resumes")
 
-    if resume.get("projects"):
-        st.write("**Projects**")
-        for project in resume["projects"]:
-            st.markdown(f"- **{project.get('name')}**: {project.get('description') or ''}")
+    with right:
+        if st.button(
+            "＋ New resume",
+            use_container_width=True,
+            type="primary",
+        ):
+            go_to("generate")
 
+    if not history:
+        st.markdown(
+            """
+            <div class="empty-state">
+                <h3>Nothing here yet</h3>
+                <p>
+                    Create your first tailored resume and it will
+                    appear in this workspace.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
 
-def render_review_result(review):
-    st.markdown("**Reviewer Verdict**")
-    if review.get("approved"):
-        st.success("Approved by the Reviewer Agent")
-    else:
-        st.warning("Not yet approved by the Reviewer Agent")
+    for index, item in enumerate(history):
+        with st.container(border=True):
+            col1, col2, col3 = st.columns([0.5, 0.28, 0.22])
 
-    if review.get("issues"):
-        st.write("Issues found:")
-        for issue in review["issues"]:
-            st.markdown(f"- {issue}")
-
-    if review.get("recommendations"):
-        st.write("Recommendations:")
-        for rec in review["recommendations"]:
-            st.markdown(f"- {rec}")
-
-
-def show_home():
-    render_header()
-    render_navbar()
-    render_backend_status()
-
-    st.subheader("Generate a Resume")
-    st.write("Paste your profile/resume text and a target job description.")
-
-    resume_text = st.text_area("Your resume / profile", height=200, placeholder="Paste your resume text here...")
-    job_description = st.text_area("Target job description", height=200, placeholder="Paste the job description here...")
-
-    if st.button("Generate", type="primary"):
-        if not resume_text.strip() or not job_description.strip():
-            st.error("Please provide both your resume text and a job description.")
-        else:
-            with st.spinner("Running the agent pipeline (profile -> ATS -> writer -> reviewer)..."):
-                result, error = post_to_backend(
-                    "generate",
-                    {
-                        "resume_text": resume_text,
-                        "job_description": job_description,
-                    },
-                    authenticated=True,
+            with col1:
+                st.markdown(
+                    f"**{item['file_name']}**"
+                )
+                st.caption(
+                    f"{item.get('company', 'Unknown company')} · "
+                    f"{item.get('role', 'Target role')}"
                 )
 
-            if error:
-                st.error(error)
+            with col2:
+                st.caption(
+                    f"{item['date']} at {item['time']}"
+                )
+                st.caption(
+                    f"{item['size_kb']} KB"
+                )
+
+            with col3:
+                st.download_button(
+                    "Download",
+                    data=item["pdf_bytes"],
+                    file_name=item["file_name"],
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key=f"history-download-{index}",
+                )
+
+
+# ============================================================
+# GENERATION
+# ============================================================
+
+def generate_resume(
+    target_data,
+    resume_file,
+    jd_file,
+):
+    files = {
+        "resume_file": (
+            resume_file.name,
+            resume_file.getvalue(),
+            resume_file.type or "application/octet-stream",
+        ),
+        "jd_file": (
+            jd_file.name,
+            jd_file.getvalue(),
+            jd_file.type or "application/octet-stream",
+        ),
+    }
+
+    with st.status(
+        "Running the AI resume pipeline...",
+        expanded=True,
+    ) as status:
+        st.write("Uploading your documents...")
+        st.write("Analyzing your existing resume...")
+        st.write("Matching your profile against the target job...")
+        st.write("Writing and reviewing the tailored resume...")
+        st.write("This can take a few minutes. Keep this tab open.")
+
+        response, error = api_request(
+            "POST",
+            "/resume/generate",
+            data=target_data,
+            files=files,
+            timeout=300,
+        )
+
+        if error:
+            status.update(
+                label="Resume generation failed",
+                state="error",
+                expanded=True,
+            )
+            st.error(error)
+            return
+
+        status.update(
+            label="Resume generated successfully",
+            state="complete",
+            expanded=False,
+        )
+
+    content_type = (
+        response.headers.get("content-type", "")
+        .lower()
+    )
+
+    if "application/json" in content_type:
+        payload = response.json()
+
+        st.session_state.generation_result = payload
+        render_results(payload)
+        return
+
+    if "application/pdf" in content_type:
+        pdf_bytes = response.content
+
+        safe_company = re.sub(
+            r"[^A-Za-z0-9]+",
+            "_",
+            target_data["company_name"],
+        ).strip("_").lower()
+
+        safe_role = re.sub(
+            r"[^A-Za-z0-9]+",
+            "_",
+            target_data["role_name"],
+        ).strip("_").lower()
+
+        filename = (
+            f"{safe_company}_{safe_role}_resume.pdf"
+        )
+
+        generated_at = datetime.now()
+
+        item = {
+            "company": target_data["company_name"],
+            "role": target_data["role_name"],
+            "file_name": filename,
+            "date": generated_at.strftime("%d %b %Y"),
+            "time": generated_at.strftime("%I:%M %p"),
+            "pdf_bytes": pdf_bytes,
+            "size_kb": max(1, round(len(pdf_bytes) / 1024)),
+        }
+
+        st.session_state.history.insert(0, item)
+        st.session_state.generation_result = None
+
+        st.success("Your tailored resume is ready.")
+
+        st.download_button(
+            "Download generated resume",
+            data=pdf_bytes,
+            file_name=filename,
+            mime="application/pdf",
+            use_container_width=True,
+            type="primary",
+        )
+        return
+
+    st.error(
+        "The backend returned an unsupported response format."
+    )
+
+
+def render_results(payload):
+    resume = (
+        payload.get("resume")
+        or payload.get("generated_resume")
+    )
+
+    ats = (
+        payload.get("ats")
+        or payload.get("ats_analysis")
+    )
+
+    review = (
+        payload.get("review")
+        or payload.get("review_result")
+    )
+
+    st.divider()
+    st.markdown("### Generation results")
+
+    if ats:
+        score = ats.get("ats_score")
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric(
+                "ATS score",
+                f"{score}/100" if score is not None else "—",
+            )
+
+        with col2:
+            keywords = ats.get("matching_keywords", [])
+            st.metric(
+                "Matched keywords",
+                len(keywords),
+            )
+
+        with col3:
+            missing = ats.get("missing_keywords", [])
+            st.metric(
+                "Missing keywords",
+                len(missing),
+            )
+
+        with st.expander("ATS analysis", expanded=True):
+            if ats.get("matching_keywords"):
+                st.write(
+                    "Matched:",
+                    ", ".join(ats["matching_keywords"]),
+                )
+
+            if ats.get("missing_keywords"):
+                st.write(
+                    "Missing:",
+                    ", ".join(ats["missing_keywords"]),
+                )
+
+            if ats.get("formatting_suggestions"):
+                st.write("Formatting suggestions:")
+                for suggestion in ats["formatting_suggestions"]:
+                    st.markdown(f"- {suggestion}")
+
+    if review:
+        with st.expander("Reviewer result", expanded=True):
+            if review.get("approved"):
+                st.success("Approved by the reviewer agent.")
             else:
-                st.session_state.generation_result = result
-                st.rerun()
+                st.warning("Reviewer found issues.")
+
+            for issue in review.get("issues", []):
+                st.markdown(f"- {issue}")
+
+            recommendations = review.get("recommendations", [])
+            if recommendations:
+                st.write("Recommendations:")
+                for recommendation in recommendations:
+                    st.markdown(f"- {recommendation}")
+
+    if resume:
+        with st.expander("Generated resume data", expanded=True):
+            summary = resume.get("professional_summary")
+            if summary:
+                st.markdown("#### Professional summary")
+                st.write(summary)
+
+            skills = resume.get("skills", [])
+            if skills:
+                st.markdown("#### Skills")
+                st.write(", ".join(skills))
+
+            experience = resume.get("experience", [])
+            if experience:
+                st.markdown("#### Experience")
+                for job in experience:
+                    title = " — ".join(
+                        filter(
+                            None,
+                            [
+                                job.get("role"),
+                                job.get("company"),
+                            ],
+                        )
+                    )
+                    st.markdown(
+                        f"**{title or 'Experience'}**"
+                    )
+                    st.caption(
+                        job.get("duration") or ""
+                    )
+                    for bullet in job.get("bullets", []):
+                        st.markdown(f"- {bullet}")
+
+            projects = resume.get("projects", [])
+            if projects:
+                st.markdown("#### Projects")
+                for project in projects:
+                    st.markdown(
+                        f"**{project.get('name', 'Project')}**"
+                    )
+                    if project.get("description"):
+                        st.write(project["description"])
+
+
+def show_generate():
+    sidebar()
+
+    page_heading(
+        "Create",
+        "Generate a job-specific resume.",
+        "Upload your current resume and the target job description. "
+        "Tell us the role you're targeting and the rest comes from "
+        "your source documents.",
+    )
+
+    left, right = st.columns([0.68, 0.32])
+
+    with right:
+        st.markdown("### Pipeline")
+
+        steps = [
+            ("1", "Profile analysis", "Extract facts from your resume"),
+            ("2", "ATS analysis", "Compare your profile with the job"),
+            ("3", "Resume writer", "Tailor the content without fabrication"),
+            ("4", "Reviewer", "Check accuracy and quality"),
+        ]
+
+        for number, title, copy in steps:
+            st.markdown(
+                f"""
+                <div class="step">
+                    <div class="step-number">{number}</div>
+                    <div>
+                        <div class="step-title">{title}</div>
+                        <div class="step-copy">{copy}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.info(
+            "Your uploaded resume is the source of truth for "
+            "experience, skills, projects, education, and certifications."
+        )
+
+        st.markdown(
+            """
+            <div class="card">
+                <div class="card-title">Privacy by design</div>
+                <div class="card-subtitle">
+                    We don't ask you to re-enter information already
+                    contained in your resume.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with left:
+        st.markdown("### 01 · Source documents")
+
+        resume_file = st.file_uploader(
+            "Current resume *",
+            type=["pdf", "docx", "txt"],
+            help="Upload the resume you want the AI to tailor.",
+            key="resume_upload_new",
+        )
+
+        jd_file = st.file_uploader(
+            "Target job description *",
+            type=["pdf", "docx", "txt"],
+            help="Upload the job description for the role you want.",
+            key="jd_upload_new",
+        )
+
+        if resume_file:
+            st.success(
+                f"Resume ready · {resume_file.name}"
+            )
+
+        if jd_file:
+            st.success(
+                f"Job description ready · {jd_file.name}"
+            )
+
+        st.markdown("### 02 · Target role")
+
+        company_name = st.text_input(
+            "Company *",
+            placeholder="Acme Corp",
+            help="The company you are applying to.",
+        )
+
+        role_name = st.text_input(
+            "Role / job title *",
+            placeholder="Python Backend Engineer",
+            help="The exact role you are targeting.",
+        )
+
+        st.markdown("### 03 · Tailoring instructions")
+
+        notes = st.text_area(
+            "Optional instructions",
+            placeholder=(
+                "Example: Emphasize backend engineering, "
+                "highlight API work, keep the resume concise, "
+                "prioritize skills relevant to this role."
+            ),
+            height=130,
+            help=(
+                "Optional guidance for tailoring. It does not override "
+                "facts in your uploaded resume."
+            ),
+        )
+
+        st.caption(
+            "Your resume remains the source of truth. "
+            "The AI must not invent skills, experience, metrics, "
+            "technologies, or achievements."
+        )
+
+        target_data = {
+            "company_name": company_name.strip(),
+            "role_name": role_name.strip(),
+            "notes": notes.strip(),
+        }
+
+        required = [
+            resume_file,
+            jd_file,
+            target_data["company_name"],
+            target_data["role_name"],
+        ]
+
+        st.divider()
+
+        if not all(required):
+            st.caption(
+                "Required: current resume, job description, "
+                "company, and target role."
+            )
+
+        if st.button(
+            "Generate tailored resume",
+            type="primary",
+            use_container_width=True,
+            disabled=not all(required),
+        ):
+            generate_resume(
+                target_data,
+                resume_file,
+                jd_file,
+            )
 
     if st.session_state.generation_result:
-        st.divider()
-        result = st.session_state.generation_result
-        render_profile_analysis(result["profile_analysis"])
-        st.divider()
-        render_ats_analysis(result["ats_analysis"])
-        st.divider()
-        render_generated_resume(result["generated_resume"])
-        st.divider()
-        render_review_result(result["review_result"])
+        render_results(
+            st.session_state.generation_result
+        )
 
 
-if st.session_state.page == ROUTES["signup"]:
-    show_signup()
-elif st.session_state.page == ROUTES["home"]:
-    show_home()
-else:
+# ============================================================
+# ROUTER
+# ============================================================
+
+if st.session_state.page == "login":
     show_login()
+elif st.session_state.page == "signup":
+    show_signup()
+elif st.session_state.page == "dashboard":
+    show_dashboard()
+elif st.session_state.page == "generate":
+    show_generate()
+else:
+    st.session_state.page = "login"
+    st.rerun()
+

@@ -17,4 +17,5 @@ dependencies = [
     "langgraph",
     "google-genai",
     "groq",
+    "pypdf>=6.16.1",
 ]
